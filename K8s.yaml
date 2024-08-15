@@ -1,0 +1,728 @@
+Kubernetes
+
+start with kubernetes -
+
+1. Create a kubernetes cluster on a cloud provider like digital ocean.
+2. install kubectl on local macine 
+3. download configuration yml file 
+4. set path and save configurationfile in side this folder with .txt extention C:\Users\name\.kube
+5. run kubectk on cmd to check 
+6. run kubectl get nodes to check is kubernetes is connected with your local 
+7. run kubectl run mywebserver --image= nginx to run a pod 
+8. check pods using kubectl get pods 
+9. get inside the pod usign exec -it Name -- bash
+
+Kubernetes components 
+
+---- etcd ----
+etcd in kubernetes is a key value store database that stores all the information related to a cluster 
+
+----Kube API server ----- 
+++  https://kubernetes.io/ ++
+
+- when we interact with the kubernetes cluster usign kubectl command line interface, we actually communicate 
+  with master api server component
+- all the other components of kubernetes must go threw kubernetes api server to work with the cluster state
+
+-----Kube-scheduler----
+Kube-scheduler watches for newly created pods that have no nods assigned, and selcet the nods for them to run on.
+
+there are sevral factors  which are taken into considration before a pod is scheduled to anode.
+ Resourec requirment 
+ Hardware/software policy constrains 
+ Affinity and Anti-Affinity
+ Data locality 
+
+
+
+************************YAML file to work with start a pod ***************************
+*************************************************************************************
+- newpod.yaml -
+ 
+apiVersion: v1
+kind: Pod 
+metadata:
+  name: nginx-webserver
+spec:
+  containers:
+  - image: nginx
+    name: demo-container
+	
+
+command to cretae a pod with yaml file 
+>> kubectl apply -f newpod.yaml 
+
+command to delete a pod with yaml file 
+>> kubectl delete -f newpod.yaml 
+
+---------------------------------------------Multi container pod -
+
+file multi-containerpod.yaml 
+apiVersion: v1
+kind: Pod 
+metadata:
+  name: nginx-webserver
+spec:
+  containers:
+  - image: nginx
+    name: demo-container1
+  - image: busybox
+    name: demo-container2
+    command:
+    - sleep 
+    - "3600"
+	
+create pod with yaml file >> kubectl apply -f newpod.yaml
+ 
+then a pod with two container inside it will be created 
+
+we can get it's description with command >> kubectl describe pod podname 
+
+
+                                            get inside the pod -
+kubectl exec -it nginx-webserver bash
+with this command we can get inside a pod and that will use container1 as a default container 
+
+
+
+---------------------------------------------------------------------------------------------------------------------
+after installing net-tools we can see the ip used by container
+>>apt-get update && apt-get install net-tools
+>> netstat -ntlp
+
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+tcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      1/nginx: master pro
+tcp6       0      0 :::80                   :::*                    LISTEN      1/nginx: master pro
+
+
+get inside a particular container within a pod 
+                            
+>>kubectl exec -it nginx-webserver -c demo-container2 sh
+
+*****we can access container1 from this container because bote are in a same pod and sharing a same ip address 
+
+{{{{{{{{{{{{{{{{{{{{{{Command and arguments _
+
+in kubernetes we can override defauld CMD and ENTRYPOINT of docker image with the help of command and args field
+
+this is a busybox docker file available on the docker hub 
+
+// docker file  >>
+
+FROM scratch
+ADD busybox.tar.gz /
+CMD ["sh"]
+
+it has sh commad that exits the container after it creats
+
+so when we crete a pod with >> kubectl apply -f busybox.yaml
+and >> kubectl get pods 
+then we get somthing like this 
+NAME              READY   STATUS             RESTARTS       AGE
+command           0/1     CrashLoopBackOff   1 (3s ago)     8s
+
+becase sh command executed and container is exited 
+ 
+but we can override this sh command present in the docker file with the help of command and args 
+// busybox.yaml >>
+
+apiVersion: v1
+kind: Pod 
+metadata:
+  name: command1
+spec:
+  containers: 
+  - name: busybox1
+    image: busybox
+    command: ["sleep"]
+    args: ["34556"]
+
+afer this status would be >>
+NAME              READY   STATUS             RESTARTS        AGE
+command1          1/1     Running            0               5s
+
+>> if nothing is set from k8s level then docker Entrypoint will be final 
+>> if somthing is in command of YAML and somthing in docker file then resuld will be mix of both
+
+{{{{{{{{{{[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[CLI documentation 
+kubectl explain component of kubernetes ex>> kubectl explain pod
+
+we can get every component extention
+>> explain pod.spec.containers.ports
+>>explain pod.spec.containers
+>>explain pod.spec
+
+create pods with cli -----------------------------------
+
+>>kubectl run nginx --image nginx 
+
+define pod
+>>kubectl run nginxp --port=80 --image=nginx
+
+genrate yaml file and make dry run active 
+>> kubectl run nginxpod --port=80 --image=nginx --dry-run=client -o yaml 
+
+
+
+++++++++++++=======================Lables and selectors _____=================
+
+Lables : Lables are the key value pairs that are attached to the kubernetes objects, suvh as pods.
+Selectors : Selectors are allow us to filter objects based on lables.
+
+LABELS -
+
+first create pod > kubectl run pod1 --image=nginx
+
+check labels > kubectl get pods --show-lables
+-
+NAME   READY   STATUS    RESTARTS   AGE   LABELS
+pod1   1/1     Running   0          82s   run=pod1
+pod2   1/1     Running   0          72s   run=pod2
+
+add labels >   kubectl label pod pod1 env=Prd  (key value pair)
+
+check labels > kubectl get pods --show-lables
+-
+NAME   READY   STATUS    RESTARTS   AGE     LABELS
+pod1   1/1     Running   0          5m17s   env=Prd,run=pod1
+pod2   1/1     Running   0          5m7s    env=UAT,run=pod2
+
+
+Selectors - 
+
+If I want to see the pods with particular labels
+then I can run the command 
+> get pods -l env=prd 
+output 
+pod3   1/1     Running   0          21m
+
+if I don;t want pod with perticular label 
+then I can a command > kubectl label pod pod1 env!=Prd
+NAME   READY   STATUS    RESTARTS   AGE     LABELS
+pod2   1/1     Running   0          5m7s    env=UAT,run=pod2
+
+
+to remove Label >>>> kubectl label pod pod1 env-
+ pod/pod1 unlabeled
+
+to label all the pods at once 
+>>kubectl label pod --all status=paid
+
+>> get pods --show-labels
+NAME     READY   STATUS    RESTARTS   AGE     LABELS
+nginx1   1/1     Running   0          4m59s   env=dev,run=nginx1,status=paid
+pod1     1/1     Running   0          47m     run=pod1,status=paid
+pod2     1/1     Running   0          46m     env=UAT,run=pod2,status=paid
+pod3     1/1     Running   0          46m     env=dev1,run=pod3,status=paid
+
+
+---------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------
+                           Replica set 
+                           
+A Replica Set purpose is to maintain a stable set of replica pods runiign at any given time 
+
+Create a replicaset ReplicaSet.YAML
+
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ksreplicaset
+spec:
+  replicas: 5
+  selector:
+    matchLabels: ----lable under this should match with label of pod----------|
+      tier: frontend                                                          |
+  template: --------------pod starts from here                                |
+    metadata:                                                                 |
+      labels: ---------label of pod-------------------------------------------|
+        tier: frontend
+    spec:
+      containers: 
+      - name: phpapp
+        image: nginx
+        
+------------------------ a replica set alwasy identify it's pods with their LABELS
+
+----------------------------------------------------------------------------------------------------------------
+                                   -  Deployments -
+                                   
+                                   
+   Replicaset works well in basic functionality like manging pods, scaling pods and similar.. 
+   
+   but if some advanced functionalities are needed then deploymets are good choise 
+  
+ Deployments provides replication functionality with help of Replicasets, along with various additional capabilitity
+ like rolling out cahnges, roling back cahnges  if required 
+ 
+ Create a deployment >> Deplyments.yaml 
+ 
+apiVersion: apps/v1           
+kind: Deployment 
+metadata:
+  name: ksdeployments
+spec:
+  replicas: 5              -----------Deployments works over the replicaset 
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: phpapp
+        image: nginx:1.17.3
+ 
+ to create deployment>>>kubectl apply -f Deplyments.yaml
+ 
+ deployment will be created>> kubectl get deployments 
+ 
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+ksdeployments   5/5     5            5           33m
+
+deployments manges replicasets so if we check >> kubectl get rs -
+
+NAME                       DESIRED   CURRENT   READY   AGE
+ksdeployments-855ddb4bc8   5         5         5       31m
+
+if we make any change in our YAML file and create deployment again then new deployment will be created and 
+
+
+
+============================================== Rollout Deployment
+>kubectl rollout history deployment
+deployment.apps/ksdeployments
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+>>>>>>>>>kubectl rollout history deployment --revision 2   ----check REVISION
+deployment.apps/ksdeployments with revision #2
+Pod Template:
+  Labels:       pod-template-hash=855ddb4bc8
+        tier=frontend
+  Containers:
+   phpapp:
+    Image:      nginx:1.17.3
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+  Node-Selectors:       <none>
+  Tolerations:  <none>
+  
+  
+>>>>>>>>kubectl rollout history deployment --revision 2
+deployment.apps/ksdeployments with revision #2
+Pod Template:
+  Labels:       pod-template-hash=85747c8c88
+        tier=frontend
+  Containers:
+   phpapp:
+    Image:      nginx
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+  Node-Selectors:       <none>
+  Tolerations:  <none>
+
+
+
+  
+  
+=====================================--------Rollingback deployment------------
+check replicaset -
+
+
+
+>kubectl get rs
+
+NAME                       DESIRED   CURRENT   READY   AGE
+ksdeployments-855ddb4bc8   0         0         0       31m
+ksdeployments-85747c8c88   5         5         5       31m
+
+
+>>>kubectl rollout undo deployments ksdeployments --to-revision 1
+
+deployment.apps/ksdeployments rolled back
+
+after rolling back check replicaset -
+ 
+>kubectl get rs
+
+NAME                       DESIRED   CURRENT   READY   AGE
+ksdeployments-855ddb4bc8   5         5         5       50m
+ksdeployments-85747c8c88   0         0         0       50m
+ now this is our revision 3
+ 
+ 
+----------------------------------------Create deployment in CLI ------------------------------------------------------
+
+
+>>>>>>>>>>>>>>>>>kubectl create deployment my-deployment --image=nginx --dry-run=client -o yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: my-deployment
+  name: my-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-deployment
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: my-deployment
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources: {}
+status: {}
+
+and when we want multiple replicas 
+
+>>>>>>>>>>>>>kubectl create deployment my-deployment --image=nginx --replicas 5 --dry-run=client -o yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: my-deployment
+  name: my-deployment
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: my-deployment
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: my-deployment
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources: {}
+status: {}
+
+-----------change the image in deployment in case if may mistake is done or---
+
+
+>>>>>>>>>>>>>>>kubectl set image deployment [deployment name] [container name]=nginx:latest < image 
+check rollout history >
+deployment.apps/ksdeployments
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+4         <none>
+
+>>>kubectl set image deployment ksdeployments phpapp=nginx:latest --record  (--record ) to keep the record of this command 
+
+deployment.apps/ksdeployments image updated
+
+C:\Users\shiva\Desktop\K8s>kubectl rollout history deployment ksdeployments
+deployment.apps/ksdeployments
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+4         kubectl set image deployment ksdeployments phpapp=nginx:latest --record=true
+
+
+
+scale deployment================================
+
+kubectl deployments >>
+
+>>>>>>>>>>>>>>>>>>>>>>>> kubectl scale deployments ksdeployments --replicas 4
+
+kubectl create deployment newdplmnt --image=nginex:latest --dry-run=client -o yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: newdplmnt
+  name: newdplmnt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: newdplmnt
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: newdplmnt
+    spec:
+      containers:
+      - image: nginex:latest
+        name: nginex
+        resources: {}
+status: {}
+
+
+
+==================================================================================================
+                                        Daemon set
+Deamonset can insures that all the nodes run a copy of a pod 
+as nodes are added to cluster pods are added to them 
+
+as we can see we have 2 nodes in our cluster 
+K8s>kubectl get nodes
+NAME                   STATUS   ROLES    AGE    VERSION
+pool-topyac6vi-r9hop   Ready    <none>   20d    v1.30.2
+pool-v2lf9yhgf-brajw   Ready    <none>   3m4s   v1.30.2
+
+
+if we create a deployment then all the pods may or my not me equally assign among all the nodes present in the current cluster 
+ to solve this problem daemon set is there 
+ 
+ ///////////////////////DaemonSet.YAML
+ apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ksdaemonset
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: phpapp
+        image: nginx
+
+
+K8s>kubectl apply -f Daemonset.yaml
+daemonset.apps/ksdaemonset created
+
+
+kubectl get pods -o wide                                              here we can see both pods are launched on different nodes
+NAME                READY   STATUS    RESTARTS   AGE   IP             NODE                   NOMINATED NODE   READINESS GATES
+ksdaemonset-8lwnr   1/1     Running   0          30s   10.244.0.70    pool-topyac6vi-r9hop   <none>           <none>
+ksdaemonset-rxpgr   1/1     Running   0          30s   10.244.0.223   pool-v2lf9yhgf-brajw   <none>           <none>
+
+if any new worker node will be created then new pod will automatically launched for that NODE
+
+
+
+========================================================================================================
+
+                                             Node Selector 
+                                             
+ node selector allow us to run constrains about runnign a pod in a specific worker node  
+
+to label a node >>>> kubectl label node pool-topyac6vi-r9hop disk=ssd
+
+if we want to launch a pod on this particular node we can add a node selector under teh spec section 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-webserver
+spec:
+  containers:
+  - image: nginx
+    name: demo-container
+  nodeSelector:
+    disk: ssd    ---- here we can mention the label that node have 
+    
+then pode created from this file will be created in the node with same label 
+
+====================================================================================================
+
+                                        Node Affinity
+       
+       List the nodes in your cluster, along with their labels:
+
+kubectl get nodes --show-labels
+
+Choose one of your nodes, and add a label to it:
+
+kubectl label nodes <your-node-name> disktype=ssd
+
+Schedule a Pod using required node affinity 
+This manifest describes a Pod that has a requiredDuringSchedulingIgnoredDuringExecution node affinity,disktype: ssd. This means that the pod will get scheduled only on a node that has a disktype=ssd label.
+
+
+Schedule a Pod using preferred node affinity
+This manifest describes a Pod that has a preferredDuringSchedulingIgnoredDuringExecution node affinity,disktype: ssd. This means that the pod will prefer a node that has a disktype=ssd label.
+    
+===================================================================================================================
+                                        Resource Limit 
+  if we Schedule a large application in a node which has limited resources, then it will soon led to OOM out of memmory 
+  exeption.
+  
+  to define the resource limit of a pod we uses Request and Limit in the pod 
+  Request is the inimum capacity of node to handel the application 
+  Limit is the maximum capcity to handel the application 
+  
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-webserver-rl
+spec:
+  containers:
+  - image: nginx
+    name: demo
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "0"
+      limits:
+        memory: "128Mi"
+        cpu: "0.5"
+
+scheduler checks and run the pod on the node with matching criteria 
+if no node is available then pod will not run
+========================================================================================================
+
+
+                Taints and Tolerations
+                
+                
+  Taints are used to repel the pods from specific nodes -
+  
+  create taint
+K8s>>>kubectl taint nodes pool-v2lf9yhgf-brajw key=value:NoSchedule
+
+node/pool-v2lf9yhgf-brajw tainted
+
+>>> kubectl describe node pool-v2lf9yhgf-brajw
+
+CreationTimestamp:  Tue, 06 Aug 2024 16:00:19 +0530
+---taints:             key=value:noschedule
+unschedulable:      false
+Lease:
+  HolderIdentity:  pool-v2lf9yhgf-brajw
+  AcquireTime:     <unset>
+
+now taint is created for this specific node and any pod can not run on this 
+if we create 5 pods in replicaset we can see 5 of them are runnign only on node without taint
+kubectl get pods -o wide
+NAME                             READY   STATUS    RESTARTS   AGE   IP            NODE                   NOMINATED NODE   READINESS GATES
+my-deployment-7c86cc47f6-2fzjp   1/1     Running   0          24s   10.244.0.23   pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-5kvvl   1/1     Running   0          24s   10.244.0.46   pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-lx4dj   1/1     Running   0          24s   10.244.0.25   pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-nqbhh   1/1     Running   0          24s   10.244.0.11   pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-vg9l7   1/1     Running   0          24s   10.244.0.78   pool-topyac6vi-r9hop   <none>           <none>
+
+if run pod on the taintednode we have to create a toleration 
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-webserver
+spec:
+  containers:
+  - image: nginx
+    name: demo-container
+  tolerations:
+  - key: "key"
+    operator: "Exists"
+    effect: "NoSchedule"
+    
+and after creating pod from this file we can see    
+
+K8s>kubectl get pods -o wide
+NAME                             READY   STATUS    RESTARTS   AGE     IP             NODE                   NOMINATED NODE   READINESS GATES
+my-deployment-7c86cc47f6-2fzjp   1/1     Running   0          8m30s   10.244.0.23    pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-5kvvl   1/1     Running   0          8m30s   10.244.0.46    pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-lx4dj   1/1     Running   0          8m30s   10.244.0.25    pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-nqbhh   1/1     Running   0          8m30s   10.244.0.11    pool-topyac6vi-r9hop   <none>           <none>
+my-deployment-7c86cc47f6-vg9l7   1/1     Running   0          8m30s   10.244.0.78    pool-topyac6vi-r9hop   <none>           <none>
+nginx-webserver                  1/1     Running   0          5s      10.244.0.241   pool-v2lf9yhgf-brajw   <none>           <none>
+
+last pod is runnign on tainted NODE
+
+  
+  
+  
+  
+  
+  
+                                        
+                                        
+
+
+    
+    
+    
+    
+    
+    
+
+ 
+
+ 
+                                             
+                                             
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+	
+
+
+
+ 
+
