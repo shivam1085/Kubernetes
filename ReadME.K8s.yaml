@@ -655,7 +655,762 @@ nginx-webserver                  1/1     Running   0          5s      10.244.0.2
 
 last pod is runnign on tainted NODE
 
+ ==========================================================================
+                                           Adapter Container pattern      
+  At its core, the Adapter Container pattern involves deploying an additional container within the same pod as 
+  your main application container. This secondary container acts as an intermediary, adapting or modifying data
+  or communication between your main application and external systems. The main goal is to ensure seamless 
+  integration without burdening your main application with protocol translation, data format conversion, 
+  or encryption.
   
+  
+===============================================================================================================
+
+                                        -----Services-----
+                                       
+whenever we creat a pod, container created will have a private IP address 
+
+Kubernetes service acts as an abstraction which can provide single Ip address and DNS throw which pod can be accessed 
+
+this layer of abstractionallow us to perform lot of operations like load balancing, scaling of pods and others
+
+Kubernetes services -
+- NodePort 
+- Cluster IP 
+- LoadBalancer 
+- External Name 
+
+Creating service endpoint in Kubernetes
+
+Service and endpoints 
+
+Service is a gateway that distributes incoming traffic between its endpoints
+endpoints are underlying pods to which traffic will routed to
+
+-----------------------------------------------------------------
+there will be two backend pods and 1 front end pod and a backend gateway service
+
+NAME                             READY   STATUS    RESTARTS   AGE
+backend-pod-1                    1/1     Running   0          106s
+backend-pod-2                    1/1     Running   0          102s
+frontend-pod                     1/1     Running   0          8s
+
+
+apt-get update && apt-get -y install curl
+curl 10.244.0.19 
+result - 
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+------------------------------
+
+create service -
+
+apiVersion: v1
+kind: Service
+metadata:
+   name: kplabs-service
+spec:
+   ports:
+   - port: 8080
+     targetPort: 80
+     
+ 
+ create endpoint - 
+ 
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kplabs-service
+subsets:
+  - addresses:
+      - ip: 10.244.0.23
+    ports:
+      - port: 80
+      
+ 
+ 
+kubectl exec -it frontend-pod -- bash
+curl <SERVICE-IP:8080>
+
+----------------------------------------------------------------------
+
+                                    Service Selector
+                                    
+                                            
+Services use labels and selectors to define which Pods are part of the service. 
+Labels are key-value pairs attached to Pods, while selectors are used by services to filter and
+include Pods matching those labels.
+
+create a Deployment 
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
+
+
+This Deployment has 3 replicas with "nginx" label 
+
+
+then create a service 
+
+apiVersion: v1
+kind: Service
+metadata:
+   name: my-service-selector
+spec:
+   selector:
+     app: nginx   ---------------------selector with matching lable 
+   ports:
+   - port: 80
+     targetPort: 80
+     
+then run this command - 
+     
+>>>>kubectl describe service my-service-selector
+
+
+Name:              my-service-selector
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=nginx
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.245.208.99
+IPs:               10.245.208.99
+Port:              <unset>  80/TCP
+TargetPort:        80/TCP
+Endpoints:         10.244.0.101:80,10.244.0.26:80,10.244.0.28:80    all 3 IPS are here 
+Session Affinity:  None
+Events:            <none>
+ 
+
+and when we scalte the replicas 
+>> kubectl scale deployment/nginx-deployment --replicas=10
+ 
+ 
+and check >kubectl describe service my-service-selector
+ 
+Name:              my-service-selector
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=nginx
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.245.208.99
+IPs:               10.245.208.99
+Port:              <unset>  80/TCP
+TargetPort:        80/TCP
+Endpoints:         10.244.0.101:80,10.244.0.24:80,10.244.0.26:80 + 7 more...   ---- we can see 7 new IP are added automatically 
+Session Affinity:  None
+Events:            <none>
+
+
+so this is how we don't need to add all the ips of our pods to the srvice manually 
+
+==========================================================================================================
+                                             NodePort
+
+
+Node port exposes the service on each nods's IP at a static port(Node Port)
+
+You'll be able to contact the NodePort Service, from outside the cluster, by requesting
+<WorkerIP>:<NodePort>.
+If servicetype is NodePort, then Kubernetes will allocate a port (default: 30000-32767) on every
+worker node.
+
+create a pod 
+
+>kubectl run nodeport-pod --labels="type=publicpod" --image=nginx
+
+Create a Node-port service 
+/nodeport
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nodeport
+spec:
+  selector:
+    type: publicpod
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    
+ > kubectl get service 
+ NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+kubernetes            ClusterIP   10.245.0.1       <none>        443/TCP        31d
+my-nodeport           NodePort    10.245.226.75    <none>        80:31696/TCP   3m5s
+my-service            ClusterIP   10.245.183.108   <none>        8080/TCP       5d23h
+my-service-selector   ClusterIP   10.245.208.99    <none>        80/TCP         47h
+
+here we can see in nodeport service, there is one more port 31696 along with port 80 this is port of our node 
+
+and by using this port along with nods IP we can access our pod from internet http://64.227.129.77:31696/
+
+================================================================================================================
+
+
+                                      Load Balancer service 
+                                                                                         
+                                            
+ when we use node port evertime we have to always mention port number with IP or DNS 
+
+ Load balancer service type will automatically deploy an external load balancer 
+ this load balancer takes care of routing request to the underlying service.
+ 
+ implement - 
+ 
+ create a pod 
+ >kubectl run lb-pod --labels="type=loadbalanced" --image=nginx
+
+Create a load balancer service 
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-loadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    protocol: TCP
+  selector:
+    type: loadbalanced
+
+>kubectl apply -f elb-service.yaml
+
+when we run this command en external load balancer on the cloud provider is getting created 
+
+C:\Users\shiva\Desktop\K8s\Kubernetes\Networking>kubectl get service
+NAME                  TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)        AGE
+kubernetes            ClusterIP      10.245.0.1       <none>           443/TCP        32d
+my-loadbalancer       LoadBalancer   10.245.77.141    144.126.255.23   80:30686/TCP   3m11s --- here we can see an external IP address
+my-nodeport           NodePort       10.245.226.75    <none>           80:31696/TCP   19h
+my-service            ClusterIP      10.245.183.108   <none>           8080/TCP       6d19h
+my-service-selector   ClusterIP      10.245.208.99    <none>           80/TCP         2d19h
+
+we can access this pod with ip 144.126.255.23 
+
+
+=======================================================================================================
+
+                                 Menifest service with CLI 
+ 
+first create a pod with name nginx 
+
+kubectl run nginx image=nginx
+
+cli command to create service for and add pod to it 
+
+                               (service name(new))
+>> kubectl expose pod nginx --name nginx-svc --port=80 --target-port=80 --dry-run=client -o yaml 
+                (pod name(existing))
+                    
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx-svc
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    run: nginx
+status:
+  loadBalancer: {}
+  
+  
+we can do modifications in the file after saving it
+                                                                                                (file name)
+>> kubectl expose pod nginx --name nginx-svc --port=80 --target-port=80 --dry-run=client -o yaml > service.yaml  
+  
+  
+define type of service 
+
+>> kubectl expose pod nginx --name nginx-svc-nodeport --port=80 --target-port=80 --type=NodePort --dry -run=client -o yaml
+                                                                              (type of service)
+  
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx-svc-nodeport
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    run: nginx
+  type: NodePort ------------(type)
+status:
+  loadBalancer: {}
+
+expose deployment 
+ 
+>>kubectl expose deployment nginx-deployment --name deploymentsvc --port=80 --target-port=80 --dry-run=client -o yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: nginx
+  name: deploymentsvc
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+status:
+  loadBalancer: {}
+  
+We had label "nginx" in our deployment so here our service automatcally added a selector "nginx" 
+
+
+=====================================================================================================================
+
+                                         Kubernetes Ingress
+                                         
+    Kubernetes ingress is a collection of routing rules which governs how External user access the service running within the
+    Kubernetes cluster 
+    
+    ingress can provide various features which includes 
+    load balancing 
+    SSL Termination 
+    Named-based virtual hosting 
+    
+=================================================================================================
+                                              \ --|-- /
+                                            --- Helm ---
+                                              / --|-- \
+      Helm is one of the package manager for kubernetes 
+      
+      it contains all of the resource definitions necessary to run an application, tool or service inside of a kubernetes cluster 
+      
+      a repository is a place where charts can be collected and shared
+      
+      helm packages can be places in the local disk or can also be stored in public or private repository 
+      
+      
+      when istall helm package from repository then we need to mention repo name
+      
+      Jenkins ---
+      >> helm repo add jenkins https://charts.jenkins.io   --    when package is present in any repositpry 
+      
+      "jenkins" has been added to your repositories
+      
+      >> helm repo update
+      
+      >> helm install my-jenkins jenkins/jenkins
+      
+      Woerdpress ---
+      >> helm repo add bitnami https://charts.bitnami.com/bitnami
+      >> helm install my-wordpress bitnami/wordpress
+      
+      
+=========================================================================================
+
+                                            Ingress Example 
+                                            
+                                            
+create pods pod1 pod2 
+
+expose pods with service service1 and service2  
+
+create a frontend pod                                         
+                                            
+  
+create file ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-wildcard-host   ---------------  ingress name 
+spec:
+  ingressClassName: nginx      
+  rules:
+  - host: "web.website01.internal"       ------------- ip 
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/bar"
+        backend:
+          service:
+            name: service1          --------------service name 
+            port:
+              number: 80
+  - host: "web.website02.internal"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/foo"
+        backend:
+          service:
+            name: service2
+            port:
+              number: 80
+              
+kubectl apply -f ingress.yaml  
+
+
+>kubectl get ingress
+NAME                    CLASS   HOSTS                                           ADDRESS         PORTS   AGE
+ingress-wildcard-host   nginx   web.website01.internal,web.website02.internal   68.183.246.43   80      41h
+
+
+>kubectl describe ingress ingress-wildcard-host
+Name:             ingress-wildcard-host
+Labels:           <none>
+Namespace:        default
+Address:          68.183.246.43
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host                    Path  Backends
+  ----                    ----  --------
+  web.website01.internal
+                          /bar   service1:80 (10.244.0.120:80)
+  web.website02.internal
+                          /foo   service2:80 (10.244.0.120:80)
+Annotations:              <none>
+Events:                   <none>
+
+
+after runnign this command we can see a load balancer will be created in the cloud provider
+
+         
+              
+install ingress controller with helm
+
+ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+ helm install [RELEASE_NAME] ingress-nginx/ingress-nginx
+
+>helm list --all-namespaces
+NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART
+        APP VERSION
+ingress-nginx   default         1               2024-08-26 00:43:38.8848904 +0530 IST   deployed        ingress-nginx-4.11.2    1.11.2
+
+
+>kubectl get ingressclass
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx   k8s.io/ingress-nginx   <none>       40h
+
+
+go inside the frontend pod and curl on both 
+
+> kubectl exec -it frontendpod -- bash 
+curl web.website02.internal
+should get response 
+
+curl web.website01.internal
+should get response 
+
+then unistall controller 
+>helm uninstall ingress-nginx
+release "ingress-nginx" uninstalled
+
+================================================================================================================
+
+                                            Kubernetes Namespace
+                                            
+                                            
+Kubernetes supports multiple vertual clusters backed by the same physical cluster, these vertual clusters are called namespaces.
+     
+    
+Example Use-Case:
+You provide all the users within Team A full access on "Pods" resources [only for Team A NS]
+You provide all the users within Team A full access on deployments [only for Team B NS]
+
+>Kubectl get namespace
+
+NAME              STATUS   AGE
+default           Active   44d
+kube-node-lease   Active   44d
+kube-public       Active   44d
+kube-system       Active   44d
+
+
+if we run any command without specifying namespace then it executes on default Namespace
+
+>Kubectl get pods --- default Namespace
+NAME                                    READY   STATUS    RESTARTS       AGE
+frontend-pod                            1/1     Running   12 (58m ago)   5d
+my-release-mariadb-0                    0/1     Pending   0              2d23h
+my-release-wordpress-5bbf78b7f5-trbcl   0/1     Pending   0              10d
+my-wordpress-6f46677859-wm6nt           0/1     Pending   0              10d
+my-wordpress-mariadb-0                  0/1     Pending   0              10d
+.
+.
+
+
+>Kubectl get pods --namespace kube-system  ---- name space 
+NAME                            READY   STATUS    RESTARTS   AGE
+cilium-hzjpl                    1/1     Running   0          44d
+cilium-k4zxd                    1/1     Running   0          24d
+coredns-85f59d8784-67pgz        1/1     Running   0          2d23h
+coredns-85f59d8784-mrr7j        1/1     Running   0          44d
+cpc-bridge-proxy-29pmd          1/1     Running   0          44d
+cpc-bridge-proxy-npklw          1/1     Running   0          24d
+.
+.
+
+
+create Namespace----
+
+kubectl create namespace {teama} namespace name 
+namespace/teama created
+
+>Kubectl get namespace
+NAME              STATUS   AGE
+default           Active   44d
+kube-node-lease   Active   44d
+kube-public       Active   44d
+kube-system       Active   44d
+teama             Active   94s --- newly created name sapce 
+ 
+>Kubectl get pods --namespace teama
+No resources found in teama namespace.
+
+
+>Kubectl run nginx --image=nginx --namespace teama    --- crteate resource in new namespace 
+pod/nginx created
+
+>Kubectl get pods --namespace teama
+NAME    READY   STATUS    RESTARTS   AGE
+nginx   1/1     Running   0          11s
+
+
+Namespace Description
+
+default  - The default namespace for objects with no other namespace
+
+kube-system -  The namespace for objects created by the Kubernetes system
+
+kube-public -  This namespace is created automatically and is readable by all users. It
+contains information, like CA, that helps kubeadm join and authenticate
+worker nodes.
+
+kube-node-release -  The kube-node-lease namespace contains lease objects that are used
+by kubelet to determine node health.
+
+
+===================================================================================================
+
+                                Service Accounts 
+                                
+                                
+      Kubernetes clusters have two kinds of Accounts
+      
+      User Accounts (for Humans)
+      Service Accounts (for Application)
+
+
+        if any user or any kind of service wants to perform an opration on kubernetes cluster they need some kind of authentication 
+        it can be a token(kubeconfig file) or it can be a certificate or so on 
+        
+        >kubectl exec -it app-pod bash
+        
+        TOKEN LOCATION INSIDE pod
+        
+        root@app-pod:/# cd /var/run/secrets/kubernetes.io/serviceaccount/
+        root@app-pod:/var/run/secrets/kubernetes.io/serviceaccount# 1s
+        ca.crt namespace toke
+        root@app-pod:/var/run/secrets/kubernetes.io/serviceaccount# 
+        
+        
+        
+each namespcae have a service account named default 
+
+>kubectl get ns
+NAME              STATUS   AGE
+default           Active   45d
+kube-node-lease   Active   45d
+kube-public       Active   45d
+kube-system       Active   45d
+team1             Active   23h
+teama             Active   23h
+
+>kubectl get sa -n teama
+NAME      SECRETS   AGE
+default   0         23h
+
+
+each service account can be a associated with certain service accounts 
+
+if we want a specific service account to be mounted to a pod so for that we can put that under the spec
+
+
+spec:
+   serviceAccountName: newserviceaccount
+   
+   
+==============================================================================================================
+
+                                    Named Port 
+                                    
+                                    
+Insted of port number we can also specify port Name 
+
+>kubectl run nginx --image=nginx --port=80 --dry-run=client -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    ports:
+    - containerPort: 80
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+
+>kubectl expose pod nginx --name first-svc --port=80 --target-port=http
+--type=NodePort
+service/first-svc exposed
+
+C:\Users\shiva\Desktop\K8s\Kubernetes\Networking>kubectl get svc
+NAME                   TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)                      AGE
+first-svc              NodePort       10.245.28.161    <none>           80:32457/TCP                 4s
+
+>kubectl get svc first-svc -o wide
+NAME        TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE   SELECTOR
+first-svc   NodePort   10.245.28.161   <none>        80:32457/TCP   36s   run=nginx
+
+
+>curl  139.59.28.42:32457
+curl: (28) Failed to connect to 139.59.28.42 port 32457 after 21047 ms: Couldn't connect to server
+
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx2
+  name: nginx2
+spec:
+  containers:
+  - image: nginx
+    name: nginx2
+    ports:
+    - containerPort: 80
+      name: custom-http
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+ 
+ >curl  139.59.28.42:32611
+<!DOCTYPE html>
+
+
+
+>kubectl describe svc named-svc
+Name:                     named-svc
+Namespace:                default
+Labels:                   run=nginx2
+Annotations:              <none>
+Selector:                 run=nginx2
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.245.53.158
+IPs:                      10.245.53.158
+Port:                     <unset>  80/TCP
+TargetPort:               custom-http/TCP
+NodePort:                 <unset>  32611/TCP
+Endpoints:                10.244.0.53:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+
+
+
+
+      
+      
+      
+      
+      
+      
+      
+      
+     
+       
+       
+                                            
+     
+
+
+
+
+
+
+
+                                               
+                                               
+ 
   
   
   
