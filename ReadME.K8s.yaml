@@ -1250,7 +1250,9 @@ by kubelet to determine node health.
 ===================================================================================================
 
                                 Service Accounts 
-                                
+        create service account -
+        
+        kubectl create sa [service accoutn name]
                                 
       Kubernetes clusters have two kinds of Accounts
       
@@ -1385,6 +1387,273 @@ External Traffic Policy:  Cluster
 Events:                   <none>
 
 
+================================================================================================
+
+                            Authentication
+                            
+ 
+ Authenticate is the process or action of verifying the identity of a user or process 
+                            
+                            Authorization 
+                            
+   ABAC - Attribute based Access control
+   RBAC - Role-based access Control 
+   
+   
+   create role 
+   
+   apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["list"]
+
+
+
+create role binding 
+
+apiVersion: rbac.authorization.k8s.io/v1
+# This role binding allows "jane" to read pods in the "default" namespace.
+# You need to already have a Role named "pod-reader" in that namespace.
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+# You can specify more than one "subject"
+- kind: User
+  name: system:serviceaccount:default:external
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  # "roleRef" specifies the binding to a Role / ClusterRole
+  kind: Role #this must be Role or ClusterRole
+  name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+
+
+>kubectl get rolebinding -o yaml
+apiVersion: v1
+items:
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"RoleBinding","metadata":{"annotations":{},"name":"read-pods","namespace":"default"},"roleRef":{"apiGroup":"rbac.authorization.k8s.io","kind":"Role","name":"pod-reader"},"subjects":[{"apiGroup":"rbac.authorization.k8s.io","kind":"User","name":"system:serviceaccount:default:external"}]}
+    creationTimestamp: "2024-09-02T18:16:59Z"
+    name: read-pods
+    namespace: default
+    resourceVersion: "13903322"
+    uid: dc530b0f-efbb-4ab2-944b-0445c07c9bef
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: pod-reader
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:serviceaccount:default:external
+kind: List
+metadata:
+  resourceVersion: ""
+  
+  
+  
+  
+this is namespace based role and role binding, cluster base role binding can be used for binding role for clusters   
+  
+  
+  
+  
+  
+===================================================================================================
+
+
+                                         Create SSH certificate 
+                                         
+    
+password for ssh    5(C$JsUZcnt.,2c
+
+
+https://github.com/zealvora/certified-kubernetes-administrator/blob/master/Domain%204%20-%20Security/certificate-steps.md
+
+
+======================================================================================================
+
+                                Kubeconfig 
+                                
+                                
+   Create Kube config 
+
+1. Add cluster details.
+
+kubectl config --kubeconfig=base-config set-cluster development --server=https://1.2.3.4
+
+
+
+2. Add user details
+
+kubectl config --kubeconfig=base-config set-credentials experimenter --username=dev --password=some-password
+
+
+
+3. Setting Contexts
+
+kubectl config --kubeconfig=base-config set-context dev-frontend --cluster=development --namespace=frontend --user=experimenter
+
+
+
+4. Repeating above steps for second cluster
+
+
+
+kubectl config --kubeconfig=base-config set-cluster production --server=https://4.5.6.7
+
+
+
+kubectl config --kubeconfig=base-config set-context prod-frontend --cluster=production --namespace=frontend --user=experimenter
+
+
+
+Next Steps:
+
+
+
+1. View Kubeconfig
+
+kubectl config --kubeconfig=base-config view
+
+
+
+2. Get current conext information:
+
+kubectl config --kubeconfig=base-config get-contexts
+
+
+
+3. Switch Conexts:
+
+kubectl config --kubeconfig=base-config use-context dev-frontend
+
+============================================================================================================
+
+
+                                          kubernetes SECRETS
+                                          
+           Generating Secret Based on Generic - Literal Value
+kubectl create secret generic  firstsecret --from-literal=dbpassword=mypassword123
+#####Generating Secret Based on Generic - File
+
+kubectl create secret generic  secondsecret --from-file=./credentials.txt
+
+To View Secret from CLI
+
+kubectl get secret firstsecret -o yaml
+
+secret-data.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thirdsecret
+type: Opaque
+data:
+  username: ZGJhZG1pbg==         encoded values with base64
+  password: bXlwYXNzd29yZDEyMw==
+  
+
+secret-stringdata.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: stringdata
+type: Opaque
+stringData:
+ config.yaml: |-                              
+   username: dbadmin              no need to encode
+   password: mypassword
+  
+===============================================================================================
+
+Mountinf  secret inside pod 
+
+
+secretpod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secretmount
+spec:
+  containers:
+  - name: secretmount
+    image: nginx
+    volumeMounts:
+    - name: foo
+      mountPath: "/etc/foo"
+      readOnly: true
+  volumes:
+  - name: foo
+    secret:
+      secretName: firstsecret
+      
+      
+Mounting Secrets as Environment Variables
+File Name: secret-env.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-env
+spec:
+  containers:
+  - name: secret-env
+    image: nginx
+    env:
+      - name: SECRET_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: firstsecret
+            key: dbpass
+  restartPolicy: Never
+=============================================================================================
+
+
+                                        DOcker Volumes 
+                                        
+        when we create a docker container docker stores its data inside a directory
+--      var/lib/docker/overlay2
+
+       but when docker container is deleted its data from this directoy gets deleted 
+       
+       
+       check docker volumes 
+       -- docker volume 
+       
+       create docker volumes 
+       
+       -- docker volume create [name of volume ]
+       
+       
+       
+       create a docker container with attached volume 
+       
+       -- docker run -dt --name busybox -v newvol:/etc busybox
+       
+       docker volume inspect newvol 
+       
+       var/lib/docker/newvol/data/
+       
+       will store all the data of new docker container 
+       
+       if docker container gets deleted but volumes remains 
+       
+       
+       
+                                        
+  
 
 
 
