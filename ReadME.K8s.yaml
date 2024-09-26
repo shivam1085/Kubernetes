@@ -1915,6 +1915,23 @@ Sr No	Document Link
 17	Understanding Network Policies - Part 02
 
 
+============================================================================================================
+kubernetes Events
+ 
+with help of kubernetes events we can see all the activities done in past one hour 
+kubectl get events
+LAST SEEN   TYPE     REASON      OBJECT         MESSAGE
+2m23s       Normal   Scheduled   pod/eventpod   Successfully assigned default/eventpod to mypool-u5rmlza96-wfwt2
+2m23s       Normal   Pulling     pod/eventpod   Pulling image "nginx"
+2m14s       Normal   Pulled      pod/eventpod   Successfully pulled image "nginx" in 8.407s (8.407s including waiting). Image size: 71027698 bytes.
+2m14s       Normal   Created     pod/eventpod   Created container eventpod
+2m14s       Normal   Started     pod/eventpod   Started container eventpod
+
+-------------------------------------------------------------------------------------
+
+Kubernetes --field-selector
+
+get pod --all-namespaces --field-selector metadata.name!=((podname)),metadata.namespace!=((podname))
 
 
 
